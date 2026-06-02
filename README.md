@@ -1,5 +1,7 @@
 # GeekMagic Resizer 📟
 
+Try it out here: https://selotapetm.github.io/resizer/
+
 A tiny, single-file web app that resizes any image or animated GIF to exactly **240 × 240 px** — the native resolution of the [GeekMagic SmallTV / mini display](https://www.geekmagic.com/).
 
 Everything runs **client-side in your browser**. No uploads, no server, no tracking — your images never leave your machine.
