@@ -116,6 +116,30 @@ Edit `src/index.js`, then:
 npm run deploy
 ```
 
+## Auto-deploy with GitHub Actions (optional)
+
+Instead of running `wrangler deploy` by hand, the workflow at
+[`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml)
+redeploys the Worker automatically whenever files under `worker/` change on
+`main`. Set it up once:
+
+1. **Create a deploy token** — Cloudflare dashboard → **My Profile** →
+   **API Tokens** → **Create Token** → use the **Edit Cloudflare Workers**
+   template → **Create Token** → copy it.
+
+2. **Find your Account ID** — Cloudflare dashboard → **Workers & Pages**;
+   the **Account ID** is shown in the right-hand sidebar.
+
+3. **Add them as GitHub repository secrets** — in your repo on GitHub:
+   **Settings → Secrets and variables → Actions → New repository secret**.
+   Add both:
+   - `CLOUDFLARE_API_TOKEN` → the token from step 1
+   - `CLOUDFLARE_ACCOUNT_ID` → the id from step 2
+
+That's it. Push any change under `worker/` to `main` (or click **Run workflow**
+on the Actions tab) and GitHub deploys it for you — your token never leaves
+GitHub's encrypted secrets.
+
 ## Local development
 
 ```bash
