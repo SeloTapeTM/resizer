@@ -17,6 +17,7 @@ Everything runs **client-side in your browser**. No uploads, no server, no track
 - 🎨 **Background fills** — Black, White, or None (transparent, PNG output only)
 - 👀 **Live side-by-side preview** of the original vs. the resized output
 - ⬇️ **One-click download** — PNG for static images, GIF for animations
+- ☁️ **Optional cloud sharing** — save a conversion on one device and download it on another; the last 20 are kept (see [Cloud sharing](#cloud-sharing-optional))
 - 📱 **Responsive** — works on desktop and mobile, with drag-and-drop
 
 ## Usage
@@ -37,6 +38,25 @@ Because it's a single static file, you can host it for free almost anywhere:
 - **GitHub Pages** — Settings → Pages → Deploy from `main` / root → live at `https://<user>.github.io/resizer/`
 - **Netlify** — drag `index.html` onto [netlify.com/drop](https://app.netlify.com/drop)
 - **Cloudflare Pages** / **Vercel** — connect the repo for auto-deploys on push
+
+## Cloud sharing (optional)
+
+By default the app is 100% client-side. If you want to **convert on one device
+and download on another**, deploy the small Cloudflare Worker in [`worker/`](worker/).
+It stores the most recent 20 conversions in an R2 bucket and powers the
+"☁ Save to cloud" button and the "Recent conversions" gallery.
+
+Quick version:
+
+1. Deploy the Worker — see [`worker/README.md`](worker/README.md)
+2. Set `API_BASE` near the top of the `<script>` in `index.html` to your Worker URL
+3. Redeploy the static site — the cloud UI activates automatically
+
+When `API_BASE` is left empty, the cloud features stay hidden and the app
+behaves exactly as before.
+
+> ⚠️ Stored files are **public** — anyone who opens the app can see and download
+> them. Don't save anything private.
 
 ## How it works
 

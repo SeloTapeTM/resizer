@@ -1,0 +1,9 @@
+name = "geekmagic-resizer-store"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# R2 bucket used to store recent conversions.
+# Create it first with:  wrangler r2 bucket create geekmagic-conversions
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "geekmagic-conversions"
