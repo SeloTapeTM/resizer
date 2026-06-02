@@ -1,60 +1,125 @@
-# Cloud storage Worker
+# Cloud storage Worker (KV — no credit card required)
 
 A small [Cloudflare Worker](https://workers.cloudflare.com/) that stores the
-**last 20** converted files in an [R2](https://developers.cloudflare.com/r2/)
-bucket, so a conversion made on one device can be downloaded from another.
+**last 20** converted files in [KV](https://developers.cloudflare.com/kv/) storage.
+Unlike R2, **KV does not require a credit card** — it is included in the free Workers plan.
 
-> ⚠️ Stored files are **public** — anyone with the link (or who opens the app)
-> can see and download them. Don't save anything private.
+Free tier limits (far more than personal use needs):
+| Resource | Free allowance |
+|---|---|
+| KV reads | 100,000 / day |
+| KV writes | 1,000 / day |
+| KV storage | 1 GB |
+| Workers requests | 100,000 / day |
 
-## Endpoints
+> ⚠️ Stored files are **public** — anyone who opens the app can see and download them.
+> Don't save anything private.
 
-| Method | Path           | Description                          |
-|--------|----------------|--------------------------------------|
-| `POST` | `/api/upload`  | Store a file (raw body + `X-Filename` header) |
-| `GET`  | `/api/recent`  | List the most recent conversions (JSON) |
-| `GET`  | `/f/<key>`     | Download/serve a stored file         |
+---
 
-Only the newest 20 files are kept; older ones are pruned automatically on each
-upload. Each file is capped at 12 MB.
+## One-time setup
 
-## Deploy
+### 1 — Create a free Cloudflare account
 
-1. **Install Wrangler** and log in:
-   ```bash
-   npm install
-   npx wrangler login
-   ```
+Sign up at <https://dash.cloudflare.com/sign-up>. **No credit card needed.**
 
-2. **Create the R2 bucket** (name must match `wrangler.toml`):
-   ```bash
-   npx wrangler r2 bucket create geekmagic-conversions
-   ```
+### 2 — Install Wrangler and log in
 
-3. **Deploy:**
-   ```bash
-   npm run deploy
-   ```
-   Wrangler prints your Worker URL, e.g.
-   `https://geekmagic-resizer-store.<you>.workers.dev`.
+Run these from the `worker/` folder:
 
-4. **Point the frontend at it** — open `../index.html` and set:
-   ```js
-   const API_BASE = 'https://geekmagic-resizer-store.<you>.workers.dev';
-   ```
-   Commit and redeploy the static site. The "☁ Save to cloud" button and
-   "Recent conversions" gallery activate automatically once `API_BASE` is set.
+```bash
+npm install
+npx wrangler login
+```
+
+A browser tab opens — click **Allow** to authorize the CLI.
+
+### 3 — Create the KV namespace
+
+```bash
+npx wrangler kv namespace create STORE
+```
+
+The output looks like:
+
+```
+🌀 Creating namespace with title "geekmagic-resizer-store-STORE"
+✅ Success!
+Add the following to your configuration file in your kv_namespaces array:
+{ binding = "KV", id = "abc123def456..." }
+```
+
+**Copy that `id`** and paste it into `wrangler.toml`:
+
+```toml
+[[kv_namespaces]]
+binding = "KV"
+id = "abc123def456..."   # ← paste here
+```
+
+### 4 — Deploy
+
+```bash
+npm run deploy
+```
+
+Wrangler prints your Worker URL:
+
+```
+https://geekmagic-resizer-store.YOUR-SUBDOMAIN.workers.dev
+```
+
+**Copy that URL** — you'll use it as `API_BASE` in the next step.
+
+If this is your first Worker, Wrangler will ask you to pick a `*.workers.dev` subdomain first (free, one-time).
+
+### 5 — Verify the backend
+
+```bash
+curl https://geekmagic-resizer-store.YOUR-SUBDOMAIN.workers.dev/api/recent
+# Expected: {"items":[]}
+```
+
+### 6 — Enable the cloud UI in the frontend
+
+Open `../index.html` and find this line near the top of the `<script>` block:
+
+```js
+const API_BASE = '';
+```
+
+Change it to your Worker URL (no trailing slash):
+
+```js
+const API_BASE = 'https://geekmagic-resizer-store.YOUR-SUBDOMAIN.workers.dev';
+```
+
+### 7 — Redeploy the static site
+
+```bash
+cd ..
+git add index.html
+git commit -m "Enable cloud sharing"
+git push
+```
+
+GitHub Pages picks up the change within a minute. That's it — the
+**☁ Save to cloud** button and **Recent conversions** gallery are now live.
+
+---
+
+## Updating the Worker
+
+Edit `src/index.js`, then:
+
+```bash
+npm run deploy
+```
 
 ## Local development
 
 ```bash
-npm run dev   # serves the Worker on http://localhost:8787 with a local R2
+npm run dev   # Worker on http://localhost:8787 with a local KV store
 ```
 
 Set `API_BASE = 'http://localhost:8787'` in `index.html` to test end-to-end.
-
-## Cost
-
-Comfortably within Cloudflare's free tier: Workers allow 100k requests/day and
-R2 includes 10 GB storage + generous free operations — far more than a handful
-of 240×240 images needs.
