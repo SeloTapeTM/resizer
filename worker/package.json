@@ -1,0 +1,13 @@
+{
+  "name": "geekmagic-resizer-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that stores the last 20 GeekMagic Resizer conversions in R2",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}
