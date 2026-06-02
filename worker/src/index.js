@@ -1,19 +1,23 @@
 /**
- * GeekMagic Resizer — cloud storage Worker
+ * GeekMagic Resizer — cloud storage Worker (KV edition)
  *
- * Stores the most recent converted files in an R2 bucket so a conversion
- * made on one device can be downloaded from another. Only the last
- * MAX_FILES uploads are kept; older ones are pruned on each upload.
+ * Uses Cloudflare Workers KV instead of R2 — no credit card required.
+ * Free tier: 100k reads/day, 1k writes/day, 1 GB storage, 25 MB per value.
+ * A 240×240 image is typically well under 1 MB, so limits are never hit.
  *
  * Routes:
  *   POST /api/upload   — store a converted file (raw body)
  *   GET  /api/recent   — list the most recent conversions (JSON)
  *   GET  /f/<key>      — download/serve a stored file
+ *
+ * KV layout:
+ *   "meta"      → JSON array of the last MAX_FILES item descriptors
+ *   "file:<id>" → raw binary of the stored image
  */
 
 const MAX_FILES = 20;
-const MAX_SIZE  = 12 * 1024 * 1024; // 12 MB per file
-const PREFIX    = 'conversions/';
+const MAX_SIZE  = 10 * 1024 * 1024; // 10 MB per file (KV limit is 25 MB)
+const FILE_TTL  = 60 * 60 * 24 * 30; // 30 days auto-expiry
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -22,10 +26,10 @@ const CORS = {
   'Access-Control-Max-Age': '86400',
 };
 
-function json(data, status = 200, extra = {}) {
+function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS, ...extra },
+    headers: { 'Content-Type': 'application/json', ...CORS },
   });
 }
 
@@ -33,20 +37,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS });
-    }
+    if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
 
     try {
-      if (url.pathname === '/api/upload' && request.method === 'POST') {
-        return await upload(request, env, url);
-      }
-      if (url.pathname === '/api/recent' && request.method === 'GET') {
-        return await recent(env, url);
-      }
-      if (url.pathname.startsWith('/f/')) {
-        return await serve(url, env);
-      }
+      if (url.pathname === '/api/upload' && request.method === 'POST') return upload(request, env, url);
+      if (url.pathname === '/api/recent' && request.method === 'GET')  return recent(env, url);
+      if (url.pathname.startsWith('/f/'))                               return serve(url, env);
       return json({ error: 'Not found' }, 404);
     } catch (err) {
       return json({ error: err.message || 'Internal error' }, 500);
@@ -58,88 +54,75 @@ export default {
 async function upload(request, env, url) {
   const body = await request.arrayBuffer();
   if (!body.byteLength) return json({ error: 'Empty body' }, 400);
-  if (body.byteLength > MAX_SIZE) return json({ error: 'File too large' }, 413);
+  if (body.byteLength > MAX_SIZE) return json({ error: 'File too large (max 10 MB)' }, 413);
 
-  const rawName  = request.headers.get('X-Filename') || 'conversion';
-  const name     = sanitizeName(rawName);
-  const type     = request.headers.get('Content-Type') || 'application/octet-stream';
+  const type = request.headers.get('Content-Type') || '';
   if (!type.startsWith('image/')) return json({ error: 'Only image uploads allowed' }, 415);
 
-  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : 'bin';
-  const key = `${PREFIX}${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const rawName = request.headers.get('X-Filename') || 'conversion';
+  const name    = sanitize(rawName);
+  const id      = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const fileKey = `file:${id}`;
+  const ext     = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : 'bin';
 
-  await env.BUCKET.put(key, body, {
-    httpMetadata: { contentType: type },
-    customMetadata: { name },
+  await env.KV.put(fileKey, body, {
+    expirationTtl: FILE_TTL,
+    metadata: { name, type },
   });
 
-  await prune(env);
+  // Update metadata list
+  const meta = await getMeta(env);
+  const item = { id, name, type, size: body.byteLength, uploaded: Date.now() };
+  meta.unshift(item);
 
-  return json(toItem(key, name, type, body.byteLength, Date.now(), url.origin), 201);
+  // Prune stale entries beyond MAX_FILES
+  const pruned = meta.slice(MAX_FILES);
+  await Promise.all(pruned.map(i => env.KV.delete(`file:${i.id}`)));
+
+  await env.KV.put('meta', JSON.stringify(meta.slice(0, MAX_FILES)));
+
+  return json({ ...item, url: fileUrl(url.origin, id, ext) }, 201);
 }
 
 /* ── GET /api/recent ── */
 async function recent(env, url) {
-  const objects = await listAll(env);
-  objects.sort((a, b) => b.uploaded - a.uploaded);
-  const items = objects.slice(0, MAX_FILES).map(o =>
-    toItem(
-      o.key,
-      o.customMetadata?.name || o.key.split('/').pop(),
-      o.httpMetadata?.contentType || 'application/octet-stream',
-      o.size,
-      o.uploaded.getTime ? o.uploaded.getTime() : +new Date(o.uploaded),
-      url.origin
-    )
-  );
+  const meta = await getMeta(env);
+  const items = meta.map(i => ({
+    ...i,
+    url: fileUrl(url.origin, i.id, i.name.includes('.') ? i.name.slice(i.name.lastIndexOf('.') + 1) : 'bin'),
+  }));
   return json({ items });
 }
 
-/* ── GET /f/<key> ── */
+/* ── GET /f/<id> ── */
 async function serve(url, env) {
-  const key = decodeURIComponent(url.pathname.slice('/f/'.length));
-  if (!key.startsWith(PREFIX)) return json({ error: 'Not found' }, 404);
+  const id      = decodeURIComponent(url.pathname.slice('/f/'.length));
+  const fileKey = `file:${id}`;
+  const { value, metadata } = await env.KV.getWithMetadata(fileKey, { type: 'arrayBuffer' });
+  if (!value) return json({ error: 'Not found' }, 404);
 
-  const obj = await env.BUCKET.get(key);
-  if (!obj) return json({ error: 'Not found' }, 404);
-
-  const name = obj.customMetadata?.name || key.split('/').pop();
-  const headers = new Headers(CORS);
-  headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/octet-stream');
-  headers.set('Content-Disposition', `attachment; filename="${name}"`);
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-  headers.set('etag', obj.httpEtag);
-  return new Response(obj.body, { headers });
+  const name = metadata?.name || id;
+  const type = metadata?.type || 'application/octet-stream';
+  return new Response(value, {
+    headers: {
+      ...CORS,
+      'Content-Type': type,
+      'Content-Disposition': `attachment; filename="${name}"`,
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
 }
 
 /* ── Helpers ── */
-function toItem(key, name, type, size, uploaded, origin) {
-  return { key, name, type, size, uploaded, url: `${origin}/f/${encodeURIComponent(key)}` };
+async function getMeta(env) {
+  const raw = await env.KV.get('meta');
+  try { return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 
-function sanitizeName(name) {
+function fileUrl(origin, id, ext) {
+  return `${origin}/f/${encodeURIComponent(id)}.${ext}`;
+}
+
+function sanitize(name) {
   return name.replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'conversion';
-}
-
-async function listAll(env) {
-  const out = [];
-  let cursor;
-  do {
-    const res = await env.BUCKET.list({
-      prefix: PREFIX,
-      cursor,
-      include: ['httpMetadata', 'customMetadata'],
-    });
-    out.push(...res.objects);
-    cursor = res.truncated ? res.cursor : undefined;
-  } while (cursor);
-  return out;
-}
-
-async function prune(env) {
-  const objects = await listAll(env);
-  if (objects.length <= MAX_FILES) return;
-  objects.sort((a, b) => b.uploaded - a.uploaded);
-  const stale = objects.slice(MAX_FILES);
-  await Promise.all(stale.map(o => env.BUCKET.delete(o.key)));
 }

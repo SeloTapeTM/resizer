@@ -43,8 +43,10 @@ Because it's a single static file, you can host it for free almost anywhere:
 
 By default the app is 100% client-side. If you want to **convert on one device
 and download on another**, deploy the small Cloudflare Worker in [`worker/`](worker/).
-It stores the most recent 20 conversions in an R2 bucket and powers the
+It stores the most recent 20 conversions in **Cloudflare KV** and powers the
 "☁ Save to cloud" button and the "Recent conversions" gallery.
+
+**No credit card required** — KV is included in Cloudflare's free Workers plan.
 
 Quick version:
 
