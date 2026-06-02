@@ -511,7 +511,7 @@
       outCanvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
         dlBtn.href = url;
-        dlBtn.download = outName(f.name, 'png');
+        dlBtn.download = outName(currentFile.name, 'png');
         footOut.textContent = 'PNG · 240×240 · ' + fmt(blob.size);
         actions.classList.add('show');
         URL.revokeObjectURL(objUrl);
