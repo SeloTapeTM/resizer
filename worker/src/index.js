@@ -96,7 +96,10 @@ async function recent(env, url) {
 
 /* ── GET /f/<id> ── */
 async function serve(url, env) {
-  const id      = decodeURIComponent(url.pathname.slice('/f/'.length));
+  // URLs look like /f/<id>.<ext>; the KV key is just file:<id>, so drop the
+  // trailing extension (the id itself never contains a dot).
+  const raw     = decodeURIComponent(url.pathname.slice('/f/'.length));
+  const id      = raw.replace(/\.[^.]+$/, '');
   const fileKey = `file:${id}`;
   const { value, metadata } = await env.KV.getWithMetadata(fileKey, { type: 'arrayBuffer' });
   if (!value) return json({ error: 'Not found' }, 404);
