@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeekMagic Resizer — 240×240</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0c0c14;
+      --surface:      #13131e;
+      --surface2:     #1a1a28;
+      --border:       #252535;
+      --accent:       #6366f1;
+      --accent-h:     #818cf8;
+      --accent-glow:  rgba(99,102,241,.22);
+      --text:         #e2e2f0;
+      --muted:        #6868a0;
+      --green:        #34d399;
+      --red:          #f87171;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 1.1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: .875rem;
+    }
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; flex-shrink: 0;
+    }
+    h1   { font-size: 1.05rem; font-weight: 700; }
+    .sub { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Main ── */
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 1.75rem 2rem;
+    }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      position: relative;
+      border: 2px dashed var(--border);
+      border-radius: 18px;
+      padding: 3.25rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      background: var(--surface);
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .drop-zone:hover, .drop-zone.over {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-glow), inset 0 0 40px var(--accent-glow);
+    }
+    .drop-zone input {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+    .dz-icon  { font-size: 2.75rem; margin-bottom: .875rem; }
+    .dz-title { font-size: 1.05rem; font-weight: 600; margin-bottom: .35rem; }
+    .dz-desc  { color: var(--muted); font-size: .82rem; }
+
+    /* ── Options ── */
+    .opts {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.1rem;
+      flex-wrap: wrap;
+    }
+    .opt-card {
+      flex: 1; min-width: 175px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: .875rem 1.1rem;
+    }
+    .opt-label {
+      font-size: .68rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); margin-bottom: .55rem;
+    }
+    .btn-row { display: flex; gap: .35rem; }
+    .btn-row button {
+      flex: 1;
+      padding: .35rem .45rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: .76rem;
+      font-family: inherit;
+      transition: all .15s;
+    }
+    .btn-row button:hover { border-color: var(--accent); color: var(--accent-h); }
+    .btn-row button.on {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff; font-weight: 600;
+    }
+
+    /* ── Progress ── */
+    .prog {
+      display: none;
+      margin-top: 1.1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+    }
+    .prog.show { display: block; }
+    .prog-hd {
+      display: flex; justify-content: space-between;
+      font-size: .78rem; color: var(--muted);
+      margin-bottom: .55rem;
+    }
+    .prog-track {
+      height: 5px; background: var(--border);
+      border-radius: 999px; overflow: hidden;
+    }
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #8b5cf6);
+      border-radius: 999px;
+      width: 0%; transition: width .25s ease;
+    }
+
+    /* ── Preview grid ── */
+    .grid {
+      display: none;
+      margin-top: 1.4rem;
+      gap: 1.2rem;
+      grid-template-columns: 1fr 1fr;
+    }
+    .grid.show { display: grid; }
+
+    .pcard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .pcard.out {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-glow);
+    }
+    .pcard-head {
+      padding: .65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .pcard-title { font-size: .78rem; font-weight: 600; }
+    .chip {
+      font-size: .62rem; font-weight: 700;
+      padding: .18rem .5rem; border-radius: 999px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .chip.hi {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      color: var(--accent-h);
+    }
+    .pcard-body {
+      min-height: 195px;
+      display: flex; align-items: center; justify-content: center;
+      background: repeating-conic-gradient(#181826 0% 25%, var(--bg) 0% 50%) 0 0 / 18px 18px;
+      padding: .75rem;
+    }
+    .pcard-body img,
+    .pcard-body canvas {
+      max-width: 100%; max-height: 300px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      border-radius: 3px;
+    }
+    .pcard-foot {
+      padding: .55rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: .7rem; color: var(--muted);
+    }
+
+    /* ── Actions ── */
+    .actions {
+      display: none;
+      margin-top: 1.4rem;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .actions.show { display: flex; }
+    .btn-dl {
+      display: inline-flex; align-items: center; gap: .45rem;
+      padding: .75rem 1.6rem;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; border: none; border-radius: 10px;
+      font-size: .9rem; font-weight: 700;
+      cursor: pointer; text-decoration: none;
+      font-family: inherit; transition: all .2s;
+    }
+    .btn-dl:hover { transform: translateY(-2px); box-shadow: 0 8px 28px var(--accent-glow); }
+    .btn-reset {
+      padding: .75rem 1.15rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted); font-size: .85rem;
+      cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .btn-reset:hover { border-color: var(--muted); color: var(--text); }
+    .note {
+      font-size: .73rem; color: var(--muted);
+      margin-left: auto;
+    }
+    .note.err { color: var(--red); }
+
+    @media (max-width: 560px) {
+      main { padding: 1rem; }
+      header { padding: 1rem; }
+      .grid { grid-template-columns: 1fr; }
+      .actions { flex-direction: column; align-items: stretch; }
+      .btn-dl, .btn-reset { justify-content: center; text-align: center; }
+      .note { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📟</div>
+  <div>
+    <h1>GeekMagic Resizer</h1>
+    <div class="sub">Resize images &amp; animated GIFs to exactly 240 × 240 px</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="dz">
+    <input type="file" id="fi" accept="image/*" />
+    <div class="dz-icon">🖼️</div>
+    <div class="dz-title">Drop your image or GIF here</div>
+    <div class="dz-desc">PNG · JPG · WEBP · GIF (animated supported) — output is always 240 × 240</div>
+  </div>
+
+  <!-- Options -->
+  <div class="opts">
+    <div class="opt-card">
+      <div class="opt-label">Resize mode</div>
+      <div class="btn-row">
+        <button data-mode="cover"    title="Fill 240×240, crop excess edges">Cover</button>
+        <button data-mode="contain"  title="Fit inside 240×240, add background bars" class="on">Contain</button>
+        <button data-mode="stretch"  title="Stretch to fill 240×240 exactly">Stretch</button>
+      </div>
+    </div>
+    <div class="opt-card">
+      <div class="opt-label">Background</div>
+      <div class="btn-row">
+        <button data-bg="black"       class="on">Black</button>
+        <button data-bg="white"            >White</button>
+        <button data-bg="transparent"      >None</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="prog" id="prog">
+    <div class="prog-hd">
+      <span id="progLabel">Processing…</span>
+      <span id="progPct">0%</span>
+    </div>
+    <div class="prog-track">
+      <div class="prog-fill" id="progFill"></div>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="grid" id="grid">
+    <div class="pcard">
+      <div class="pcard-head">
+        <span class="pcard-title">Original</span>
+        <span class="chip" id="chipOrig">—</span>
+      </div>
+      <div class="pcard-body">
+        <img id="imgOrig" src="" alt="" style="display:none" />
+      </div>
+      <div class="pcard-foot" id="footOrig">—</div>
+    </div>
+    <div class="pcard out">
+      <div class="pcard-head">
+        <span class="pcard-title">Resized output</span>
+        <span class="chip hi">240 × 240</span>
+      </div>
+      <div class="pcard-body">
+        <canvas id="outCanvas" width="240" height="240" style="display:none"></canvas>
+        <img id="outGif" src="" alt="" style="display:none" />
+      </div>
+      <div class="pcard-foot" id="footOut">—</div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions" id="actions">
+    <a class="btn-dl" id="dlBtn" href="#" download="240x240.png">⬇ Download</a>
+    <button class="btn-reset" id="resetBtn">↩ New file</button>
+    <span class="note" id="noteEl"></span>
+  </div>
+
+</main>
+
+<!-- Libraries loaded as blob URLs to avoid worker CORS issues -->
+<script>
+(function () {
+  'use strict';
+
+  const W = 240, H = 240;
+  let mode = 'contain', bg = 'black';
+  let currentFile = null, busy = false;
+  let gifWorkerUrl = null, gifJsLoaded = false;
+
+  /* ── Preload gif.js + worker as blob URLs ── */
+  const gifReady = (async () => {
+    try {
+      const CDN = 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/';
+      const [src, wBlob] = await Promise.all([
+        fetch(CDN + 'gif.js').then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+        fetch(CDN + 'gif.worker.js').then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }),
+      ]);
+      gifWorkerUrl = URL.createObjectURL(wBlob);
+      const s = document.createElement('script');
+      s.textContent = src;
+      document.head.appendChild(s);
+      gifJsLoaded = true;
+    } catch (e) {
+      console.warn('gif.js load failed:', e);
+    }
+  })();
+
+  /* Load gifuct-js */
+  const gifuctReady = new Promise(resolve => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.js';
+    s.onload = resolve;
+    s.onerror = resolve; // will catch later
+    document.head.appendChild(s);
+  });
+
+  /* ── Elements ── */
+  const dz        = document.getElementById('dz');
+  const fi        = document.getElementById('fi');
+  const prog      = document.getElementById('prog');
+  const progFill  = document.getElementById('progFill');
+  const progLabel = document.getElementById('progLabel');
+  const progPct   = document.getElementById('progPct');
+  const grid      = document.getElementById('grid');
+  const imgOrig   = document.getElementById('imgOrig');
+  const chipOrig  = document.getElementById('chipOrig');
+  const footOrig  = document.getElementById('footOrig');
+  const outCanvas = document.getElementById('outCanvas');
+  const outGif    = document.getElementById('outGif');
+  const footOut   = document.getElementById('footOut');
+  const actions   = document.getElementById('actions');
+  const dlBtn     = document.getElementById('dlBtn');
+  const resetBtn  = document.getElementById('resetBtn');
+  const noteEl    = document.getElementById('noteEl');
+
+  /* ── Option buttons ── */
+  document.querySelectorAll('[data-mode]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      if (busy) return;
+      document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      mode = btn.dataset.mode;
+      if (currentFile) processFile(currentFile);
+    })
+  );
+  document.querySelectorAll('[data-bg]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      if (busy) return;
+      document.querySelectorAll('[data-bg]').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      bg = btn.dataset.bg;
+      if (currentFile) processFile(currentFile);
+    })
+  );
+
+  /* ── Drag & drop ── */
+  dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', ()  => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]);
+  });
+  fi.addEventListener('change', e => { if (e.target.files[0]) pick(e.target.files[0]); });
+  resetBtn.addEventListener('click', reset);
+
+  /* ── Helpers ── */
+  function fmt(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  function setProgress(pct, label) {
+    progFill.style.width = pct + '%';
+    progLabel.textContent = label;
+    progPct.textContent = Math.round(pct) + '%';
+  }
+
+  function showNote(msg, isErr) {
+    noteEl.textContent = msg;
+    noteEl.className = 'note' + (isErr ? ' err' : '');
+  }
+
+  function reset() {
+    currentFile = null; busy = false;
+    grid.classList.remove('show');
+    prog.classList.remove('show');
+    actions.classList.remove('show');
+    imgOrig.style.display = outCanvas.style.display = outGif.style.display = 'none';
+    fi.value = '';
+    noteEl.textContent = '';
+  }
+
+  /* ── Draw to canvas with selected mode/bg ── */
+  function drawResized(ctx, src, srcW, srcH) {
+    ctx.clearRect(0, 0, W, H);
+    if (bg === 'black') { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+    else if (bg === 'white') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); }
+
+    let dx = 0, dy = 0, dw = W, dh = H;
+    if (mode === 'contain') {
+      const s = Math.min(W / srcW, H / srcH);
+      dw = srcW * s; dh = srcH * s;
+      dx = (W - dw) / 2; dy = (H - dh) / 2;
+    } else if (mode === 'cover') {
+      const s = Math.max(W / srcW, H / srcH);
+      dw = srcW * s; dh = srcH * s;
+      dx = (W - dw) / 2; dy = (H - dh) / 2;
+    }
+    ctx.drawImage(src, 0, 0, srcW, srcH, dx, dy, dw, dh);
+  }
+
+  /* ── File picked ── */
+  function pick(f) {
+    if (!f.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, WEBP, GIF…)');
+      return;
+    }
+    currentFile = f;
+    processFile(f);
+  }
+
+  async function processFile(f) {
+    if (busy) return;
+    noteEl.textContent = '';
+
+    // Show original preview
+    const objUrl = URL.createObjectURL(f);
+    imgOrig.src = objUrl;
+    imgOrig.style.display = 'block';
+    grid.classList.add('show');
+    actions.classList.remove('show');
+    prog.classList.remove('show');
+
+    imgOrig.onload = () => {
+      chipOrig.textContent = imgOrig.naturalWidth + '×' + imgOrig.naturalHeight;
+    };
+    footOrig.textContent = f.name + ' · ' + fmt(f.size);
+
+    if (f.type === 'image/gif') {
+      await processGif(f);
+    } else {
+      processStatic(objUrl);
+    }
+  }
+
+  /* ── Static image processing ── */
+  function processStatic(objUrl) {
+    const img = new Image();
+    img.onload = () => {
+      const ctx = outCanvas.getContext('2d');
+      drawResized(ctx, img, img.width, img.height);
+      outCanvas.style.display = 'block';
+      outGif.style.display = 'none';
+
+      outCanvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        dlBtn.href = url;
+        dlBtn.download = '240x240.png';
+        footOut.textContent = 'PNG · 240×240 · ' + fmt(blob.size);
+        actions.classList.add('show');
+        URL.revokeObjectURL(objUrl);
+      }, 'image/png');
+    };
+    img.src = objUrl;
+  }
+
+  /* ── Animated GIF processing ── */
+  async function processGif(f) {
+    busy = true;
+    prog.classList.add('show');
+    setProgress(0, 'Loading libraries…');
+
+    await Promise.all([gifReady, gifuctReady]);
+
+    const parseGIF = window.gifuct?.parseGIF || window.parseGIF;
+    const decompressFrames = window.gifuct?.decompressFrames || window.decompressFrames;
+
+    if (!parseGIF || !decompressFrames) {
+      prog.classList.remove('show');
+      showNote('GIF decoder failed to load. Check your connection and try again.', true);
+      busy = false;
+      return;
+    }
+    if (!gifJsLoaded) {
+      prog.classList.remove('show');
+      showNote('GIF encoder failed to load. Check your connection and try again.', true);
+      busy = false;
+      return;
+    }
+
+    setProgress(5, 'Reading file…');
+    const buffer = await f.arrayBuffer();
+
+    let parsed, frames;
+    try {
+      parsed = parseGIF(new Uint8Array(buffer));
+      frames = decompressFrames(parsed, true);
+    } catch (err) {
+      prog.classList.remove('show');
+      showNote('Could not parse GIF: ' + err.message, true);
+      busy = false;
+      return;
+    }
+
+    if (!frames?.length) {
+      prog.classList.remove('show');
+      showNote('No frames found in this GIF.', true);
+      busy = false;
+      return;
+    }
+
+    const gw = parsed.lsd?.width  || parsed.logicalScreenDescriptor?.width  || frames[0].dims.width;
+    const gh = parsed.lsd?.height || parsed.logicalScreenDescriptor?.height || frames[0].dims.height;
+
+    /* Canvases */
+    const compC = document.createElement('canvas');
+    compC.width = gw; compC.height = gh;
+    const compX = compC.getContext('2d');
+
+    const saveC = document.createElement('canvas');
+    saveC.width = gw; saveC.height = gh;
+    const saveX = saveC.getContext('2d');
+
+    const frmC = document.createElement('canvas');
+    const frmX = frmC.getContext('2d');
+
+    const tmpC = document.createElement('canvas');
+    tmpC.width = W; tmpC.height = H;
+    const tmpX = tmpC.getContext('2d', { willReadFrequently: true });
+
+    const encoder = new GIF({
+      workers: 2,
+      quality: 10,
+      width: W,
+      height: H,
+      workerScript: gifWorkerUrl,
+    });
+
+    let prevDisposal = 0, prevDims = null;
+
+    for (let i = 0; i < frames.length; i++) {
+      const fr = frames[i];
+      setProgress(5 + (i / frames.length) * 72, `Frame ${i + 1} / ${frames.length}`);
+
+      /* Apply previous frame's disposal */
+      if (i > 0 && prevDims) {
+        if (prevDisposal === 2) {
+          compX.clearRect(prevDims.left, prevDims.top, prevDims.width, prevDims.height);
+        } else if (prevDisposal === 3) {
+          compX.clearRect(0, 0, gw, gh);
+          compX.drawImage(saveC, 0, 0);
+        }
+      }
+
+      /* Save composite for potential disposal=3 on NEXT frame */
+      if (fr.disposalType === 3) {
+        saveX.clearRect(0, 0, gw, gh);
+        saveX.drawImage(compC, 0, 0);
+      }
+
+      /* Blit frame patch onto composite canvas */
+      frmC.width  = fr.dims.width;
+      frmC.height = fr.dims.height;
+      frmX.putImageData(
+        new ImageData(new Uint8ClampedArray(fr.patch), fr.dims.width, fr.dims.height),
+        0, 0
+      );
+      compX.drawImage(frmC, fr.dims.left, fr.dims.top);
+
+      /* Resize composite → 240×240 */
+      drawResized(tmpX, compC, gw, gh);
+
+      const delay = (fr.delay > 0 ? fr.delay : 10) * 10; // centiseconds → ms
+      encoder.addFrame(tmpX, { delay, copy: true });
+
+      prevDisposal = fr.disposalType;
+      prevDims = { left: fr.dims.left, top: fr.dims.top, width: fr.dims.width, height: fr.dims.height };
+
+      await new Promise(r => setTimeout(r, 0)); // keep UI responsive
+    }
+
+    setProgress(77, 'Encoding GIF…');
+    encoder.on('progress', p => setProgress(77 + p * 23, 'Encoding GIF…'));
+
+    encoder.on('finished', blob => {
+      const url = URL.createObjectURL(blob);
+      outGif.src = url;
+      outGif.style.display = 'block';
+      outCanvas.style.display = 'none';
+
+      dlBtn.href = url;
+      dlBtn.download = '240x240.gif';
+      footOut.textContent = `GIF · 240×240 · ${frames.length} frames · ${fmt(blob.size)}`;
+      chipOrig.textContent = `${gw}×${gh} · ${frames.length} fr`;
+
+      prog.classList.remove('show');
+      actions.classList.add('show');
+      busy = false;
+    });
+
+    encoder.on('error', err => {
+      prog.classList.remove('show');
+      showNote('Encoding error: ' + err, true);
+      busy = false;
+    });
+
+    encoder.render();
+  }
+
+})();
+</script>
+</body>
+</html>
