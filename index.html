@@ -348,7 +348,7 @@
       <div class="btn-row">
         <button data-bg="black"       class="on">Black</button>
         <button data-bg="white"            >White</button>
-        <button data-bg="transparent"      >None</button>
+        <button data-bg="transparent" title="No fill — black for JPG, transparent for GIF">None</button>
       </div>
     </div>
   </div>
@@ -623,7 +623,7 @@
   /* ── Draw to canvas with selected mode/bg ── */
   function drawResized(ctx, src, srcW, srcH) {
     ctx.clearRect(0, 0, W, H);
-    if (bg === 'black') { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+    if (bg === 'black' || bg === 'transparent') { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
     else if (bg === 'white') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); }
 
     let dx = 0, dy = 0, dw = W, dh = H;
@@ -685,13 +685,13 @@
       outCanvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
         dlBtn.href = url;
-        dlBtn.download = outName(currentFile.name, 'png');
+        dlBtn.download = outName(currentFile.name, 'jpg');
         lastBlob = blob; lastName = dlBtn.download;
-        footOut.textContent = 'PNG · 240×240 · ' + fmt(blob.size);
+        footOut.textContent = 'JPG · 240×240 · ' + fmt(blob.size);
         resetCloudBtn();
         actions.classList.add('show');
         URL.revokeObjectURL(objUrl);
-      }, 'image/png');
+      }, 'image/jpeg', 0.92);
     };
     img.src = objUrl;
   }
