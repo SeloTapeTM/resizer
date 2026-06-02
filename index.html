@@ -319,7 +319,7 @@
 
   <!-- Actions -->
   <div class="actions" id="actions">
-    <a class="btn-dl" id="dlBtn" href="#" download="240x240.png">⬇ Download</a>
+    <a class="btn-dl" id="dlBtn" href="#" download="">⬇ Download</a>
     <button class="btn-reset" id="resetBtn">↩ New file</button>
     <span class="note" id="noteEl"></span>
   </div>
@@ -413,6 +413,12 @@
   resetBtn.addEventListener('click', reset);
 
   /* ── Helpers ── */
+  function outName(origName, ext) {
+    const dot = origName.lastIndexOf('.');
+    const base = dot !== -1 ? origName.slice(0, dot) : origName;
+    return base + '_240x240.' + ext;
+  }
+
   function fmt(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
@@ -505,7 +511,7 @@
       outCanvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
         dlBtn.href = url;
-        dlBtn.download = '240x240.png';
+        dlBtn.download = outName(f.name, 'png');
         footOut.textContent = 'PNG · 240×240 · ' + fmt(blob.size);
         actions.classList.add('show');
         URL.revokeObjectURL(objUrl);
@@ -639,7 +645,7 @@
       outCanvas.style.display = 'none';
 
       dlBtn.href = url;
-      dlBtn.download = '240x240.gif';
+      dlBtn.download = outName(f.name, 'gif');
       footOut.textContent = `GIF · 240×240 · ${frames.length} frames · ${fmt(blob.size)}`;
       chipOrig.textContent = `${gw}×${gh} · ${frames.length} fr`;
 
