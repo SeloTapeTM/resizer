@@ -77,6 +77,41 @@
     .dz-title { font-size: 1.05rem; font-weight: 600; margin-bottom: .35rem; }
     .dz-desc  { color: var(--muted); font-size: .82rem; }
 
+    /* ── URL input row ── */
+    .url-row {
+      display: flex; align-items: center; gap: .6rem;
+      margin-top: .85rem;
+    }
+    .url-or {
+      font-size: .75rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    .url-input {
+      flex: 1;
+      padding: .55rem .85rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--text); font-size: .82rem;
+      font-family: inherit;
+      transition: border-color .15s;
+      min-width: 0;
+    }
+    .url-input:focus { outline: none; border-color: var(--accent); }
+    .url-input::placeholder { color: var(--muted); }
+    .url-input.err { border-color: var(--red); }
+    .url-btn {
+      padding: .55rem 1.1rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--text); font-size: .82rem; font-weight: 600;
+      cursor: pointer; font-family: inherit; transition: all .15s;
+      white-space: nowrap;
+    }
+    .url-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-h); }
+    .url-btn:disabled { opacity: .5; cursor: default; }
+
     /* ── Options ── */
     .opts {
       display: flex;
@@ -333,6 +368,13 @@
     <div class="dz-desc">PNG · JPG · WEBP · GIF (animated supported) — output is always 240 × 240</div>
   </div>
 
+  <!-- URL input -->
+  <div class="url-row">
+    <span class="url-or">or</span>
+    <input class="url-input" id="urlInput" type="url" placeholder="Paste a direct image URL…" autocomplete="off" spellcheck="false" />
+    <button class="url-btn" id="urlBtn">Load</button>
+  </div>
+
   <!-- Options -->
   <div class="opts">
     <div class="opt-card">
@@ -474,6 +516,8 @@
   const dlBtn     = document.getElementById('dlBtn');
   const cloudBtn  = document.getElementById('cloudBtn');
   const resetBtn  = document.getElementById('resetBtn');
+  const urlInput  = document.getElementById('urlInput');
+  const urlBtn    = document.getElementById('urlBtn');
   const noteEl    = document.getElementById('noteEl');
   const recent        = document.getElementById('recent');
   const recentGrid    = document.getElementById('recentGrid');
@@ -510,6 +554,8 @@
   fi.addEventListener('change', e => { if (e.target.files[0]) pick(e.target.files[0]); });
   resetBtn.addEventListener('click', reset);
   cloudBtn.addEventListener('click', saveToCloud);
+  urlBtn.addEventListener('click', loadFromUrl);
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadFromUrl(); });
   recentRefresh.addEventListener('click', () => loadRecent(true));
 
   /* ── Helpers ── */
@@ -545,6 +591,51 @@
     imgOrig.style.display = outCanvas.style.display = outGif.style.display = 'none';
     fi.value = '';
     noteEl.textContent = '';
+  }
+
+  /* ── Load image from URL ── */
+  async function loadFromUrl() {
+    const raw = urlInput.value.trim();
+    if (!raw) return;
+    urlInput.classList.remove('err');
+
+    let url;
+    try { url = new URL(raw); } catch {
+      urlInput.classList.add('err');
+      showNote('Invalid URL.', true);
+      return;
+    }
+
+    urlBtn.disabled = true;
+    urlBtn.textContent = 'Loading…';
+    showNote('', false);
+
+    try {
+      const res = await fetch(url.href);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('URL does not point to an image.');
+
+      // Derive a filename from the URL path
+      const pathName = url.pathname.split('/').pop().split('?')[0] || 'image';
+      const name = pathName.includes('.') ? pathName : pathName + '.' + (blob.type.split('/')[1] || 'jpg');
+      const file = new File([blob], name, { type: blob.type });
+
+      urlInput.value = '';
+      pick(file);
+    } catch (err) {
+      const isCors = err instanceof TypeError;
+      urlInput.classList.add('err');
+      showNote(
+        isCors
+          ? 'Could not load — the image host blocks cross-origin requests. Try downloading it first and uploading the file.'
+          : 'Failed to load: ' + err.message,
+        true
+      );
+    } finally {
+      urlBtn.disabled = false;
+      urlBtn.textContent = 'Load';
+    }
   }
 
   /* ── Cloud: save & list recent conversions ── */
