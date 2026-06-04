@@ -271,6 +271,8 @@
       cursor: pointer; font-family: inherit; transition: all .15s;
     }
     .btn-reset:hover { border-color: var(--muted); color: var(--text); }
+    #noteEl { font-size: .78rem; margin-top: .6rem; min-height: 1.1em; }
+    #noteEl.err { color: var(--red); }
 
     /* ── Recent conversions ── */
     .recent { display: none; margin-top: 2.5rem; }
@@ -436,8 +438,8 @@
     <a class="btn-dl" id="dlBtn" href="#" download="">⬇ Download</a>
     <button class="btn-cloud" id="cloudBtn">☁ Save to cloud</button>
     <button class="btn-reset" id="resetBtn">↩ New file</button>
-    <span class="note" id="noteEl"></span>
   </div>
+  <div id="noteEl" class="note"></div>
 
   <!-- Recent conversions (cloud) -->
   <section class="recent" id="recent">
@@ -579,7 +581,7 @@
 
   function showNote(msg, isErr) {
     noteEl.textContent = msg;
-    noteEl.className = 'note' + (isErr ? ' err' : '');
+    noteEl.className = isErr ? 'err' : '';
   }
 
   function reset() {
@@ -590,7 +592,7 @@
     actions.classList.remove('show');
     imgOrig.style.display = outCanvas.style.display = outGif.style.display = 'none';
     fi.value = '';
-    noteEl.textContent = '';
+    showNote('', false);
   }
 
   /* ── Load image from URL ── */
@@ -742,12 +744,15 @@
 
   async function processFile(f) {
     if (busy) return;
-    noteEl.textContent = '';
+    showNote('', false);
 
-    // Show original preview
+    // Show original preview, clear stale output
     const objUrl = URL.createObjectURL(f);
     imgOrig.src = objUrl;
     imgOrig.style.display = 'block';
+    outCanvas.style.display = 'none';
+    outGif.style.display = 'none';
+    footOut.textContent = '—';
     grid.classList.add('show');
     actions.classList.remove('show');
     prog.classList.remove('show');
@@ -758,7 +763,13 @@
     footOrig.textContent = f.name + ' · ' + fmt(f.size);
 
     if (f.type === 'image/gif') {
-      await processGif(f);
+      try {
+        await processGif(f);
+      } catch (err) {
+        busy = false;
+        prog.classList.remove('show');
+        showNote('GIF processing error: ' + (err.message || err), true);
+      }
     } else {
       processStatic(objUrl);
     }
