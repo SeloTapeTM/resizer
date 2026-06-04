@@ -42,6 +42,7 @@ export default {
     try {
       if (url.pathname === '/api/upload' && request.method === 'POST') return upload(request, env, url);
       if (url.pathname === '/api/recent' && request.method === 'GET')  return recent(env, url);
+      if (url.pathname === '/api/proxy'  && request.method === 'GET')  return proxy(url);
       if (url.pathname.startsWith('/f/'))                               return serve(url, env);
       return json({ error: 'Not found' }, 404);
     } catch (err) {
@@ -113,6 +114,26 @@ async function serve(url, env) {
       'Content-Disposition': `attachment; filename="${name}"`,
       'Cache-Control': 'public, max-age=86400',
     },
+  });
+}
+
+/* ── GET /api/proxy?url=<encoded> ── */
+async function proxy(url) {
+  const target = url.searchParams.get('url');
+  if (!target) return json({ error: 'Missing url parameter' }, 400);
+
+  let targetUrl;
+  try { targetUrl = new URL(target); } catch { return json({ error: 'Invalid URL' }, 400); }
+  if (!['http:', 'https:'].includes(targetUrl.protocol)) return json({ error: 'Only HTTP/HTTPS URLs allowed' }, 400);
+
+  const res = await fetch(targetUrl.toString(), { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) return json({ error: `Remote returned ${res.status}` }, 502);
+
+  const type = res.headers.get('Content-Type') || '';
+  if (!type.startsWith('image/')) return json({ error: 'Remote did not return an image' }, 415);
+
+  return new Response(res.body, {
+    headers: { ...CORS, 'Content-Type': type, 'Cache-Control': 'public, max-age=3600' },
   });
 }
 
