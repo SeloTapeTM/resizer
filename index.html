@@ -1431,14 +1431,6 @@ var gifuct = (() => {
     tmpC.width = W; tmpC.height = H;
     const tmpX = tmpC.getContext('2d', { willReadFrequently: true });
 
-    // Diff canvas: unchanged pixels become transparent so only deltas are encoded,
-    // matching how compact GIFs work.  Key colour R=0 G=1 B=0 is indistinguishable
-    // from black on a 240×240 display and virtually never appears in natural images.
-    const TRANS_KEY = 0x000100;
-    const diffC = document.createElement('canvas');
-    diffC.width = W; diffC.height = H;
-    const diffX = diffC.getContext('2d', { willReadFrequently: true });
-
     const encoder = new GIF({
       workers: 4,
       quality: 10,
@@ -1449,7 +1441,6 @@ var gifuct = (() => {
     });
 
     let prevDisposal = 0, prevDims = null;
-    let prevPixels = null;
 
     for (let i = 0; i < frames.length; i++) {
       const fr = frames[i];
@@ -1484,28 +1475,7 @@ var gifuct = (() => {
       drawResized(tmpX, compC, gw, gh);
 
       const delay = fr.delay > 0 ? fr.delay : 100; // gifuct-js already returns ms
-      const currPixels = tmpX.getImageData(0, 0, W, H).data;
-
-      if (prevPixels) {
-        /* Diff frame: only encode changed pixels; transparent = unchanged */
-        const img = new ImageData(W, H);
-        const d = img.data;
-        for (let p = 0; p < d.length; p += 4) {
-          if (currPixels[p] === prevPixels[p] &&
-              currPixels[p + 1] === prevPixels[p + 1] &&
-              currPixels[p + 2] === prevPixels[p + 2]) {
-            d[p] = 0; d[p + 1] = 1; d[p + 2] = 0; d[p + 3] = 255; // key colour
-          } else {
-            d[p] = currPixels[p]; d[p + 1] = currPixels[p + 1];
-            d[p + 2] = currPixels[p + 2]; d[p + 3] = 255;
-          }
-        }
-        diffX.putImageData(img, 0, 0);
-        encoder.addFrame(diffX, { delay, copy: true, transparent: TRANS_KEY, dispose: 1 });
-      } else {
-        encoder.addFrame(tmpX, { delay, copy: true, dispose: 1 });
-      }
-      prevPixels = currPixels;
+      encoder.addFrame(tmpX, { delay, copy: true });
 
       prevDisposal = fr.disposalType;
       prevDims = { left: fr.dims.left, top: fr.dims.top, width: fr.dims.width, height: fr.dims.height };
