@@ -1431,22 +1431,17 @@ var gifuct = (() => {
     tmpC.width = W; tmpC.height = H;
     const tmpX = tmpC.getContext('2d', { willReadFrequently: true });
 
-    const encoder = new GIF({
-      workers: 4,
-      quality: 10,
-      dither: false,
-      width: W,
-      height: H,
-      workerScript: gifWorkerUrl,
-    });
-
+    /* ── Phase 1: composite every frame, snapshot pixels, collect all RGB colours ──
+       We need the full colour inventory before encoding so we can pick a transparent
+       key colour that is guaranteed to be unused in every frame. */
+    const snapshots  = [];   // { pixels: Uint8ClampedArray, delay: number }
+    const usedColors = new Set();
     let prevDisposal = 0, prevDims = null;
 
     for (let i = 0; i < frames.length; i++) {
       const fr = frames[i];
-      setProgress(5 + (i / frames.length) * 72, `Frame ${i + 1} / ${frames.length}`);
+      setProgress(5 + (i / frames.length) * 40, `Reading frame ${i + 1} / ${frames.length}…`);
 
-      /* Apply previous frame's disposal */
       if (i > 0 && prevDims) {
         if (prevDisposal === 2) {
           compX.clearRect(prevDims.left, prevDims.top, prevDims.width, prevDims.height);
@@ -1455,14 +1450,11 @@ var gifuct = (() => {
           compX.drawImage(saveC, 0, 0);
         }
       }
-
-      /* Save composite for potential disposal=3 on NEXT frame */
       if (fr.disposalType === 3) {
         saveX.clearRect(0, 0, gw, gh);
         saveX.drawImage(compC, 0, 0);
       }
 
-      /* Blit frame patch onto composite canvas */
       frmC.width  = fr.dims.width;
       frmC.height = fr.dims.height;
       frmX.putImageData(
@@ -1470,17 +1462,74 @@ var gifuct = (() => {
         0, 0
       );
       compX.drawImage(frmC, fr.dims.left, fr.dims.top);
-
-      /* Resize composite → 240×240 */
       drawResized(tmpX, compC, gw, gh);
 
-      const delay = fr.delay > 0 ? fr.delay : 100; // gifuct-js already returns ms
-      encoder.addFrame(tmpX, { delay, copy: true });
+      const pixels = tmpX.getImageData(0, 0, W, H).data;
+      for (let p = 0; p < pixels.length; p += 4) {
+        usedColors.add((pixels[p] << 16) | (pixels[p + 1] << 8) | pixels[p + 2]);
+      }
+      snapshots.push({
+        pixels: new Uint8ClampedArray(pixels),
+        delay: fr.delay > 0 ? fr.delay : 100,
+      });
 
       prevDisposal = fr.disposalType;
       prevDims = { left: fr.dims.left, top: fr.dims.top, width: fr.dims.width, height: fr.dims.height };
+      await new Promise(r => setTimeout(r, 0));
+    }
 
-      await new Promise(r => setTimeout(r, 0)); // keep UI responsive
+    /* Find the first 24-bit RGB value not present in any frame.
+       Scanning from 0: pure black (0) is common, but 0x000001 almost never appears
+       in real images. In practice this finds a free slot within the first few tries. */
+    let transKey = -1;
+    for (let c = 0; c <= 0xFFFFFF; c++) {
+      if (!usedColors.has(c)) { transKey = c; break; }
+    }
+    const TR = (transKey >> 16) & 0xFF;
+    const TG = (transKey >> 8) & 0xFF;
+    const TB =  transKey        & 0xFF;
+
+    /* ── Phase 2: encode with frame differencing ── */
+    const diffC = document.createElement('canvas');
+    diffC.width = W; diffC.height = H;
+    const diffX = diffC.getContext('2d', { willReadFrequently: true });
+
+    const encoder = new GIF({
+      workers: 4,
+      quality: 10,
+      dither: false,
+      width: W,
+      height: H,
+      transparent: transKey >= 0 ? transKey : null,
+      workerScript: gifWorkerUrl,
+    });
+
+    let prevPixels = null;
+    for (let i = 0; i < snapshots.length; i++) {
+      const { pixels: currPixels, delay } = snapshots[i];
+      setProgress(45 + (i / snapshots.length) * 32, `Encoding frame ${i + 1} / ${snapshots.length}…`);
+
+      if (prevPixels && transKey >= 0) {
+        const img = new ImageData(W, H);
+        const d   = img.data;
+        for (let p = 0; p < d.length; p += 4) {
+          if (currPixels[p] === prevPixels[p] &&
+              currPixels[p + 1] === prevPixels[p + 1] &&
+              currPixels[p + 2] === prevPixels[p + 2]) {
+            d[p] = TR; d[p + 1] = TG; d[p + 2] = TB; d[p + 3] = 255;
+          } else {
+            d[p] = currPixels[p]; d[p + 1] = currPixels[p + 1];
+            d[p + 2] = currPixels[p + 2]; d[p + 3] = 255;
+          }
+        }
+        diffX.putImageData(img, 0, 0);
+        encoder.addFrame(diffX, { delay, copy: true });
+      } else {
+        diffX.putImageData(new ImageData(currPixels, W, H), 0, 0);
+        encoder.addFrame(diffX, { delay, copy: true });
+      }
+      prevPixels = currPixels;
+      await new Promise(r => setTimeout(r, 0));
     }
 
     setProgress(77, 'Encoding GIF…');
