@@ -1418,8 +1418,9 @@ var gifuct = (() => {
     const tmpX = tmpC.getContext('2d', { willReadFrequently: true });
 
     const encoder = new GIF({
-      workers: 2,
-      quality: 10,
+      workers: 4,
+      quality: 20,   // higher = fewer colours = smaller file; imperceptible on 240×240
+      dither: false,
       width: W,
       height: H,
       workerScript: gifWorkerUrl,
@@ -1459,7 +1460,7 @@ var gifuct = (() => {
       /* Resize composite → 240×240 */
       drawResized(tmpX, compC, gw, gh);
 
-      const delay = (fr.delay > 0 ? fr.delay : 10) * 10; // centiseconds → ms
+      const delay = fr.delay > 0 ? fr.delay : 100; // gifuct-js already returns ms
       encoder.addFrame(tmpX, { delay, copy: true });
 
       prevDisposal = fr.disposalType;
