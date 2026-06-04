@@ -1195,6 +1195,20 @@ var gifuct = (() => {
       pick(file);
     } catch (err) {
       const isCors = err instanceof TypeError;
+      // If CORS blocked and we have a Worker, retry transparently via the proxy
+      if (isCors && API_BASE) {
+        try {
+          const res = await fetch(`${API_BASE}/api/proxy?url=${encodeURIComponent(url.href)}`);
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+          const blob = await res.blob();
+          if (!blob.type.startsWith('image/')) throw new Error('Not an image');
+          const pathName = url.pathname.split('/').pop().split('?')[0] || 'image';
+          const name = pathName.includes('.') ? pathName : pathName + '.' + (blob.type.split('/')[1] || 'jpg');
+          pick(new File([blob], name, { type: blob.type }));
+          urlInput.value = '';
+          return;
+        } catch { /* fall through to show error */ }
+      }
       urlInput.classList.add('err');
       showNote(
         isCors
@@ -1361,7 +1375,7 @@ var gifuct = (() => {
         resetCloudBtn();
         actions.classList.add('show');
         URL.revokeObjectURL(objUrl);
-      }, 'image/jpeg', 0.92);
+      }, 'image/jpeg', 0.82);
     };
     img.src = objUrl;
   }
@@ -1417,9 +1431,17 @@ var gifuct = (() => {
     tmpC.width = W; tmpC.height = H;
     const tmpX = tmpC.getContext('2d', { willReadFrequently: true });
 
+    // Diff canvas: unchanged pixels become transparent so only deltas are encoded,
+    // matching how compact GIFs work.  Key colour R=0 G=1 B=0 is indistinguishable
+    // from black on a 240×240 display and virtually never appears in natural images.
+    const TRANS_KEY = 0x000100;
+    const diffC = document.createElement('canvas');
+    diffC.width = W; diffC.height = H;
+    const diffX = diffC.getContext('2d', { willReadFrequently: true });
+
     const encoder = new GIF({
       workers: 4,
-      quality: 20,   // higher = fewer colours = smaller file; imperceptible on 240×240
+      quality: 20,
       dither: false,
       width: W,
       height: H,
@@ -1427,6 +1449,7 @@ var gifuct = (() => {
     });
 
     let prevDisposal = 0, prevDims = null;
+    let prevPixels = null;
 
     for (let i = 0; i < frames.length; i++) {
       const fr = frames[i];
@@ -1461,7 +1484,28 @@ var gifuct = (() => {
       drawResized(tmpX, compC, gw, gh);
 
       const delay = fr.delay > 0 ? fr.delay : 100; // gifuct-js already returns ms
-      encoder.addFrame(tmpX, { delay, copy: true });
+      const currPixels = tmpX.getImageData(0, 0, W, H).data;
+
+      if (prevPixels) {
+        /* Diff frame: only encode changed pixels; transparent = unchanged */
+        const img = new ImageData(W, H);
+        const d = img.data;
+        for (let p = 0; p < d.length; p += 4) {
+          if (currPixels[p] === prevPixels[p] &&
+              currPixels[p + 1] === prevPixels[p + 1] &&
+              currPixels[p + 2] === prevPixels[p + 2]) {
+            d[p] = 0; d[p + 1] = 1; d[p + 2] = 0; d[p + 3] = 255; // key colour
+          } else {
+            d[p] = currPixels[p]; d[p + 1] = currPixels[p + 1];
+            d[p + 2] = currPixels[p + 2]; d[p + 3] = 255;
+          }
+        }
+        diffX.putImageData(img, 0, 0);
+        encoder.addFrame(diffX, { delay, copy: true, transparent: TRANS_KEY, dispose: 1 });
+      } else {
+        encoder.addFrame(tmpX, { delay, copy: true, dispose: 1 });
+      }
+      prevPixels = currPixels;
 
       prevDisposal = fr.disposalType;
       prevDims = { left: fr.dims.left, top: fr.dims.top, width: fr.dims.width, height: fr.dims.height };
